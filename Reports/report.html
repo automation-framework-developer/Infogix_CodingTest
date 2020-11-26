@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>report.html</h1>
+    <p>Report generated on 26-Nov-2020 at 21:50:00 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.8.1", "pytest": "6.0.2"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.19041-SP0</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "2.1.1", "metadata": "1.8.0", "ordering": "0.6"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.8.0</td></tr></table>
+    <h2>Summary</h2>
+    <p>6 tests ran in 136.28 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">5 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">1 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">tests/test_reset_password.py::ResetPasswordTests::test_resetpassword_emptyemail</td>
+          <td class="col-duration">10.10</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;tests.test_reset_password.ResetPasswordTests testMethod=test_resetpassword_emptyemail&gt;<br/><br/>    @pytest.mark.run(order=2)<br/>    def test_resetpassword_emptyemail(self):<br/>        self.reset.emptyVaueEmailField()<br/>        result= self.reset.verifyInvalidEmailText()<br/>        self.ts.mark(result, &quot;Invalid_email_emptyValue&quot;)<br/>        self.ts.markFinal(&quot;test_resetpassword_invalidemail&quot;, result,&quot;Invalid email error when empty value is passed&quot;)<br/>&gt;       result = self.reset.checkMessageFirstWord()<br/><br/>tests\test_reset_password.py:33: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>self = &lt;pages.reset_password.ResetPasswordPage object at 0x03F6DFA0&gt;<br/><br/>    def checkMessageFirstWord(self):<br/>        text = self.getText(self._invalid_emailtext, locatorType=&quot;xpath&quot;)<br/>&gt;       first_word= text.split()[0]<br/><span class="error">E       AttributeError: &#x27;NoneType&#x27; object has no attribute &#x27;split&#x27;</span><br/><br/>pages\reset_password.py:42: AttributeError<br/> -------------------------------Captured log call-------------------------------- <br/>[1m[31mERROR   [0m ResetPasswordPage:selenium_driver.py:46 Element not Found with locator typenamefor locatorcommit
+[32mINFO    [0m ResetPasswordPage:selenium_driver.py:69 Cannot click on element with locator typecommitlocator Type:name
+[35mDEBUG   [0m ResetPasswordPage:selenium_driver.py:159 In locator condition
+[1m[31mERROR   [0m ResetPasswordPage:selenium_driver.py:46 Element not Found with locator typexpathfor locator//*[@class=&#x27;container-lg px-2&#x27;]
+[35mDEBUG   [0m ResetPasswordPage:selenium_driver.py:161 Before finding text
+[1m[31mERROR   [0m ResetPasswordPage:selenium_driver.py:171 Failed to get text on element 
+[32mINFO    [0m ResetPasswordPage:reset_password.py:37 Text is not present
+[1m[31mERROR   [0m SeleniumDriver:teststatus.py:19 ### Verification Failed :: +Invalid_email_emptyValue
+[32mINFO    [0m SeleniumDriver:selenium_driver.py:149 ScreenShot saved to directory
+[1m[31mERROR   [0m SeleniumDriver:teststatus.py:19 ### Verification Failed :: +Invalid email error when empty value is passed
+[32mINFO    [0m SeleniumDriver:selenium_driver.py:149 ScreenShot saved to directory
+[32mINFO    [0m SeleniumDriver:teststatus.py:41 test_resetpassword_invalidemail### TEST Successfull
+[35mDEBUG   [0m ResetPasswordPage:selenium_driver.py:159 In locator condition
+[1m[31mERROR   [0m ResetPasswordPage:selenium_driver.py:46 Element not Found with locator typexpathfor locator//*[@class=&#x27;container-lg px-2&#x27;]
+[35mDEBUG   [0m ResetPasswordPage:selenium_driver.py:161 Before finding text
+[1m[31mERROR   [0m ResetPasswordPage:selenium_driver.py:171 Failed to get text on element<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_join_github.py::CreateAccountTests::test_checktext_githubpage</td>
+          <td class="col-duration">3.40</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m SigninPage:selenium_driver.py:44 Element Found with locator typexpathfor locator(//*[@type=&#x27;submit&#x27; and contains(text(),&#x27;Sign up for GitHub&#x27;)])[1]
+[32mINFO    [0m SigninPage:selenium_driver.py:67 Clicked on element with locator(//*[@type=&#x27;submit&#x27; and contains(text(),&#x27;Sign up for GitHub&#x27;)])[1]locatorType:xpath
+[35mDEBUG   [0m CreateAccountPage:selenium_driver.py:159 In locator condition
+[32mINFO    [0m CreateAccountPage:selenium_driver.py:44 Element Found with locator typexpathfor locator//h1[contains(text(),&#x27;Create your account&#x27;)]
+[35mDEBUG   [0m CreateAccountPage:selenium_driver.py:161 Before finding text
+[35mDEBUG   [0m CreateAccountPage:selenium_driver.py:163 After finding element, size is: 19
+[32mINFO    [0m CreateAccountPage:selenium_driver.py:167 Getting text on element :: 
+[32mINFO    [0m CreateAccountPage:selenium_driver.py:168 The text is :: &#x27;Create your account&#x27;
+[32mINFO    [0m CreateAccountPage:join_github.py:48 Text exists
+[32mINFO    [0m SeleniumDriver:teststatus.py:16 ### Verification Successfull :: + Text_Exists
+[32mINFO    [0m SeleniumDriver:teststatus.py:16 ### Verification Successfull :: + Test Case Passed
+[32mINFO    [0m SeleniumDriver:teststatus.py:41 test_checktext_githubpage### TEST Successfull<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_reset_password.py::ResetPasswordTests::test_resetpassword_invalidemail</td>
+          <td class="col-duration">21.44</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m SigninPage:selenium_driver.py:123 Waiting for maximum::10:: seconds for element to be clickable
+[32mINFO    [0m SigninPage:selenium_driver.py:131 Element not appeared on webpage
+[32mINFO    [0m SigninPage:selenium_driver.py:44 Element Found with locator typexpathfor locator//a[contains(text(),&#x27;Sign in&#x27;)]
+[32mINFO    [0m SigninPage:selenium_driver.py:67 Clicked on element with locator//a[contains(text(),&#x27;Sign in&#x27;)]locatorType:xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:44 Element Found with locator typexpathfor locator//a[contains(text(),&#x27;Forgot password?&#x27;)]
+[32mINFO    [0m LoginPage:selenium_driver.py:67 Clicked on element with locator//a[contains(text(),&#x27;Forgot password?&#x27;)]locatorType:xpath
+[32mINFO    [0m ResetPasswordPage:selenium_driver.py:44 Element Found with locator typexpathfor locator//input[@id=&#x27;email_field&#x27;]
+[32mINFO    [0m ResetPasswordPage:selenium_driver.py:77 Send data on element with locator//input[@id=&#x27;email_field&#x27;] locatorType:xpath
+[32mINFO    [0m ResetPasswordPage:selenium_driver.py:44 Element Found with locator typenamefor locatorcommit
+[32mINFO    [0m ResetPasswordPage:selenium_driver.py:67 Clicked on element with locatorcommitlocatorType:name
+[35mDEBUG   [0m ResetPasswordPage:selenium_driver.py:159 In locator condition
+[1m[31mERROR   [0m ResetPasswordPage:selenium_driver.py:46 Element not Found with locator typexpathfor locator//*[@class=&#x27;container-lg px-2&#x27;]
+[35mDEBUG   [0m ResetPasswordPage:selenium_driver.py:161 Before finding text
+[1m[31mERROR   [0m ResetPasswordPage:selenium_driver.py:171 Failed to get text on element 
+[32mINFO    [0m ResetPasswordPage:reset_password.py:37 Text is not present
+[1m[31mERROR   [0m SeleniumDriver:teststatus.py:19 ### Verification Failed :: +Invalid_email
+[32mINFO    [0m SeleniumDriver:selenium_driver.py:149 ScreenShot saved to directory
+[1m[31mERROR   [0m SeleniumDriver:teststatus.py:19 ### Verification Failed :: +Inserting m.ie into email field in reset_password page displays error message
+[32mINFO    [0m SeleniumDriver:selenium_driver.py:149 ScreenShot saved to directory
+[32mINFO    [0m SeleniumDriver:teststatus.py:41 test_resetpassword_invalidemail### TEST Successfull<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_join_github.py::CreateAccountTests::test_CreateAccountGreyedButton</td>
+          <td class="col-duration">10.09</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[1m[31mERROR   [0m CreateAccountPage:selenium_driver.py:46 Element not Found with locator typeidfor locatoruser_login
+[32mINFO    [0m CreateAccountPage:selenium_driver.py:79 Cannot send data on element with locator typeuser_login locator Type:id
+[32mINFO    [0m CreateAccountPage:selenium_driver.py:44 Element Found with locator typeidfor locatoruser_email
+[32mINFO    [0m CreateAccountPage:selenium_driver.py:79 Cannot send data on element with locator typeuser_email locator Type:id
+[1m[31mERROR   [0m CreateAccountPage:selenium_driver.py:46 Element not Found with locator typeidfor locatoruser_password
+[32mINFO    [0m CreateAccountPage:selenium_driver.py:79 Cannot send data on element with locator typeuser_password locator Type:id
+[32mINFO    [0m CreateAccountPage:selenium_driver.py:44 Element Found with locator typexpathfor locator//*[@type=&#x27;submit&#x27;]
+[32mINFO    [0m CreateAccountPage:selenium_driver.py:242 Status is True
+[32mINFO    [0m CreateAccountPage:selenium_driver.py:244 Element is enabled for //*[@type=&#x27;submit&#x27;] locatorType:xpath
+[1m[31mERROR   [0m SeleniumDriver:teststatus.py:19 ### Verification Failed :: +Button_Greyed_out
+[32mINFO    [0m SeleniumDriver:selenium_driver.py:149 ScreenShot saved to directory
+[1m[31mERROR   [0m SeleniumDriver:teststatus.py:19 ### Verification Failed :: +Test Case Passed as button is greyed out
+[32mINFO    [0m SeleniumDriver:selenium_driver.py:149 ScreenShot saved to directory
+[32mINFO    [0m SeleniumDriver:teststatus.py:41 test_CreateAccountGreyedButton### TEST Successfull<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_login.py::LoginTests::test_login</td>
+          <td class="col-duration">20.48</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m SigninPage:selenium_driver.py:123 Waiting for maximum::10:: seconds for element to be clickable
+[32mINFO    [0m SigninPage:selenium_driver.py:131 Element not appeared on webpage
+[32mINFO    [0m SigninPage:selenium_driver.py:44 Element Found with locator typexpathfor locator//a[contains(text(),&#x27;Sign in&#x27;)]
+[32mINFO    [0m SigninPage:selenium_driver.py:67 Clicked on element with locator//a[contains(text(),&#x27;Sign in&#x27;)]locatorType:xpath
+[32mINFO    [0m LoginPage:selenium_driver.py:44 Element Found with locator typeidfor locatorlogin_field
+[32mINFO    [0m LoginPage:selenium_driver.py:77 Send data on element with locatorlogin_field locatorType:id
+[32mINFO    [0m LoginPage:selenium_driver.py:44 Element Found with locator typenamefor locatorcommit
+[32mINFO    [0m LoginPage:selenium_driver.py:67 Clicked on element with locatorcommitlocatorType:name
+[35mDEBUG   [0m LoginPage:selenium_driver.py:159 In locator condition
+[32mINFO    [0m LoginPage:selenium_driver.py:44 Element Found with locator typexpathfor locator//*[@class=&#x27;container-lg px-2&#x27; ]
+[35mDEBUG   [0m LoginPage:selenium_driver.py:161 Before finding text
+[35mDEBUG   [0m LoginPage:selenium_driver.py:163 After finding element, size is: 31
+[32mINFO    [0m LoginPage:selenium_driver.py:167 Getting text on element :: 
+[32mINFO    [0m LoginPage:selenium_driver.py:168 The text is :: &#x27;Incorrect username or password.&#x27;
+[32mINFO    [0m LoginPage:login.py:43 Text exists
+[32mINFO    [0m SeleniumDriver:teststatus.py:16 ### Verification Successfull :: + Username_Mandatory_Field
+[32mINFO    [0m LoginPage:selenium_driver.py:44 Element Found with locator typeidfor locatorlogin_field
+[32mINFO    [0m LoginPage:selenium_driver.py:232 Data cleared on textbox login_field locatorType:id
+[32mINFO    [0m LoginPage:selenium_driver.py:44 Element Found with locator typeidfor locatorpassword
+[32mINFO    [0m LoginPage:selenium_driver.py:77 Send data on element with locatorpassword locatorType:id
+[32mINFO    [0m LoginPage:selenium_driver.py:44 Element Found with locator typenamefor locatorcommit
+[32mINFO    [0m LoginPage:selenium_driver.py:67 Clicked on element with locatorcommitlocatorType:name
+[35mDEBUG   [0m LoginPage:selenium_driver.py:159 In locator condition
+[32mINFO    [0m LoginPage:selenium_driver.py:44 Element Found with locator typexpathfor locator//*[@class=&#x27;container-lg px-2&#x27; ]
+[35mDEBUG   [0m LoginPage:selenium_driver.py:161 Before finding text
+[35mDEBUG   [0m LoginPage:selenium_driver.py:163 After finding element, size is: 31
+[32mINFO    [0m LoginPage:selenium_driver.py:167 Getting text on element :: 
+[32mINFO    [0m LoginPage:selenium_driver.py:168 The text is :: &#x27;Incorrect username or password.&#x27;
+[32mINFO    [0m LoginPage:login.py:43 Text exists
+[32mINFO    [0m SeleniumDriver:teststatus.py:16 ### Verification Successfull :: + Password_Mandatory_Field
+[32mINFO    [0m SeleniumDriver:teststatus.py:16 ### Verification Successfull :: + Test Case passed for username and password as mandatory fields
+[32mINFO    [0m SeleniumDriver:teststatus.py:41 test_login### TEST Successfull<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_signin.py::SigninTests::test_signin</td>
+          <td class="col-duration">14.86</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m SigninPage:selenium_driver.py:123 Waiting for maximum::10:: seconds for element to be clickable
+[32mINFO    [0m SigninPage:selenium_driver.py:131 Element not appeared on webpage
+[32mINFO    [0m SigninPage:selenium_driver.py:44 Element Found with locator typexpathfor locator//a[contains(text(),&#x27;Sign in&#x27;)]
+[32mINFO    [0m SigninPage:selenium_driver.py:67 Clicked on element with locator//a[contains(text(),&#x27;Sign in&#x27;)]locatorType:xpath
+[32mINFO    [0m SeleniumDriver:teststatus.py:16 ### Verification Successfull :: + clicking on Sign in button user is redirected to login page
+[32mINFO    [0m SeleniumDriver:teststatus.py:16 ### Verification Successfull :: + Sign in test case passed
+[32mINFO    [0m SeleniumDriver:teststatus.py:41 test_signinPage### TEST Successfull<br/></div></td></tr></tbody></table></body></html>
